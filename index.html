@@ -705,6 +705,29 @@
             </div>
         </section>
         
+        
+        <!-- Dashboard for Screenshot (hidden, used for capture only) -->
+        <div id="dashboardCapture" style="display:none; position:absolute; left:-9999px; top:0; width:800px; background:white; padding:30px; font-family:-apple-system,'Microsoft YaHei',sans-serif;">
+            <div style="text-align:center; margin-bottom:20px;">
+                <div style="font-size:22px; font-weight:700; color:#1a365d;" id="dashTitle">每日销售报表</div>
+                <div style="font-size:14px; color:#718096; margin-top:4px;" id="dashDate">-</div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px;" id="dashCards">
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:15px; margin-bottom:20px;">
+                <div style="background:#f7fafc; border-radius:10px; padding:15px;">
+                    <div style="font-size:13px; font-weight:600; color:#2d3748; margin-bottom:10px;">业务员销售额占比</div>
+                    <canvas id="dashPieChart" width="350" height="250"></canvas>
+                </div>
+                <div style="background:#f7fafc; border-radius:10px; padding:15px;">
+                    <div style="font-size:13px; font-weight:600; color:#2d3748; margin-bottom:10px;">业务员销售额对比</div>
+                    <canvas id="dashBarChart" width="350" height="250"></canvas>
+                </div>
+            </div>
+            <div id="dashSalespersonList" style="margin-bottom:10px;"></div>
+            <div style="text-align:center; font-size:10px; color:#a0aec0; margin-top:10px;">© 2026 每日销售报表工具 · 开发者：张洪杰</div>
+        </div>
+
         <!-- Actions -->
         <section class="actions" id="actions" style="display: none;">
             <button class="btn btn-success" id="btnExportExcel">
@@ -1311,16 +1334,67 @@
         
         // Screenshot
         async function takeScreenshot() {
-            const reportSection = document.getElementById('reportSection');
-            
             try {
                 showLoading(true);
-                const canvas = await html2canvas(reportSection, {
+                
+                // 准备看板截图数据
+                const dash = document.getElementById('dashboardCapture');
+                const data = currentData;
+                if (!data) { showToast('请先上传数据', 'error'); showLoading(false); return; }
+                
+                // 填充看板标题和日期
+                document.getElementById('dashTitle').textContent = '每日销售报表';
+                document.getElementById('dashDate').textContent = data.date;
+                
+                // 填充核心数据卡片
+                const cardsHtml = [
+                    { label: '总单数', value: data.totalOrders + '单', color: '#2d3748' },
+                    { label: '总客户数', value: data.totalCustomers + '个', color: '#2d3748' },
+                    { label: '净销售额', value: formatCurrency(data.netAmount), color: '#1a365d' },
+                    { label: '销售总额', value: formatCurrency(data.salesAmount), color: '#38a169' },
+                    { label: '退货总额', value: formatCurrency(Math.abs(data.returnAmount)), color: '#e53e3e' },
+                    { label: '退货单数', value: data.returnOrders + '单', color: '#e53e3e' }
+                ].map(c => '<div style="background:#f7fafc; border-radius:8px; padding:12px; text-align:center;"><div style="font-size:11px; color:#718096;">' + c.label + '</div><div style="font-size:20px; font-weight:700; color:' + c.color + ';">' + c.value + '</div></div>').join('');
+                document.getElementById('dashCards').innerHTML = cardsHtml;
+                
+                // 填充业务员排名列表
+                const spList = data.salespersons.sort((a,b) => b.amount - a.amount).map((sp, i) => {
+                    const pct = data.netAmount > 0 ? (sp.amount / data.netAmount * 100).toFixed(1) : 0;
+                    return '<div style="display:flex; align-items:center; padding:8px 0; border-bottom:1px solid #e2e8f0;">' +
+                        '<div style="width:24px; height:24px; border-radius:50%; background:' + (i<3?'#1a365d':'#cbd5e0') + '; color:white; text-align:center; line-height:24px; font-size:12px; font-weight:600; margin-right:10px;">' + (i+1) + '</div>' +
+                        '<div style="flex:1; font-size:13px; font-weight:600; color:#2d3748;">' + sp.name + '<span style="font-size:11px; color:#718096; margin-left:6px;">' + sp.orders + '单</span></div>' +
+                        '<div style="font-size:14px; font-weight:700; color:#1a365d;">' + formatCurrency(sp.amount) + '</div>' +
+                        '<div style="width:80px; text-align:right; font-size:12px; color:#718096;">' + pct + '%</div>' +
+                        '</div>';
+                }).join('');
+                document.getElementById('dashSalespersonList').innerHTML = spList;
+                
+                // 复制图表到看板
+                const pieSrc = document.getElementById('pieChart');
+                const barSrc = document.getElementById('barChart');
+                const dashPie = document.getElementById('dashPieChart');
+                const dashBar = document.getElementById('dashBarChart');
+                dashPie.getContext('2d').drawImage(pieSrc, 0, 0, 350, 250);
+                dashBar.getContext('2d').drawImage(barSrc, 0, 0, 350, 250);
+                
+                // 显示看板并截图
+                dash.style.display = 'block';
+                dash.style.position = 'absolute';
+                dash.style.left = '0';
+                dash.style.top = '0';
+                dash.style.zIndex = '-1';
+                
+                const canvas = await html2canvas(dash, {
                     backgroundColor: '#ffffff',
                     scale: 2,
                     logging: false,
-                    useCORS: true
+                    useCORS: true,
+                    width: 800
                 });
+                
+                // 隐藏看板
+                dash.style.display = 'none';
+                dash.style.left = '-9999px';
                 
                 const link = document.createElement('a');
                 link.download = `销售报表_${currentData ? currentData.date.replace(/\//g, '') : ''}.png`;
