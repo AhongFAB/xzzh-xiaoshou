@@ -1339,59 +1339,52 @@
                 const data = currentData;
                 if (!data) { showToast('请先上传数据', 'error'); showLoading(false); return; }
                 
-                // Calculate return count
-                const returnCount = data.salespersons.reduce((sum, sp) => {
-                    return sum + sp.records.filter(r => r.isReturn).length;
-                }, 0);
+                const returnCount = data.salespersons.reduce((sum, sp) => sum + sp.records.filter(r => r.isReturn).length, 0);
+                const sortedSP = [...data.salespersons].sort((a,b) => b.total - a.total);
                 
-                const W = 800, scale = 2;
+                // Pre-calculate total height
+                const W = 800;
+                const spRows = sortedSP.length;
+                const totalH = 60 + 20 + 2 * 70 + 15 + 270 + 50 + 28 + spRows * 32 + 15 + 30;
+                
                 const canvas = document.createElement('canvas');
-                canvas.width = W * scale;
-                canvas.height = 900 * scale; // will adjust
+                canvas.width = W * 2;
+                canvas.height = totalH * 2;
                 const ctx = canvas.getContext('2d');
-                ctx.scale(scale, scale);
+                ctx.scale(2, 2);
                 
-                // Helper: rounded rect
-                function roundRect(x, y, w, h, r, fill, stroke) {
+                function rRect(x, y, w, h, r, fill, stroke) {
                     ctx.beginPath();
                     ctx.moveTo(x + r, y);
-                    ctx.lineTo(x + w - r, y);
-                    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-                    ctx.lineTo(x + w, y + h - r);
-                    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-                    ctx.lineTo(x + r, y + h);
-                    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-                    ctx.lineTo(x, y + r);
-                    ctx.quadraticCurveTo(x, y, x + r, y);
+                    ctx.arcTo(x + w, y, x + w, y + h, r);
+                    ctx.arcTo(x + w, y + h, x, y + h, r);
+                    ctx.arcTo(x, y + h, x, y, r);
+                    ctx.arcTo(x, y, x + w, y, r);
                     ctx.closePath();
                     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
                     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
                 }
-                
-                // Helper: draw text
-                function drawText(text, x, y, font, color, align) {
-                    ctx.font = font;
-                    ctx.fillStyle = color;
-                    ctx.textAlign = align || 'left';
-                    ctx.textBaseline = 'top';
+                function txt(text, x, y, font, color, align) {
+                    ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align || 'left'; ctx.textBaseline = 'top';
                     ctx.fillText(text, x, y);
                 }
                 
-                let y = 0;
+                let curY = 0;
                 
-                // Background
+                // White background
                 ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, W, 900);
+                ctx.fillRect(0, 0, W, totalH);
                 
-                // Header bar
-                roundRect(0, 0, W, 60, 0, '#1a365d');
-                drawText('每日销售报表', W/2, 14, 'bold 22px "Microsoft YaHei", sans-serif', '#ffffff', 'center');
-                drawText(data.date || '', W/2, 40, '14px "Microsoft YaHei", sans-serif', 'rgba(255,255,255,0.8)', 'center');
-                y = 80;
+                // Header
+                ctx.fillStyle = '#1a365d';
+                ctx.fillRect(0, 0, W, 60);
+                txt('每日销售报表', W/2, 12, 'bold 22px "Microsoft YaHei",sans-serif', '#ffffff', 'center');
+                txt(data.date || '', W/2, 40, '14px "Microsoft YaHei",sans-serif', 'rgba(255,255,255,0.85)', 'center');
+                curY = 80;
                 
-                // 6 Data cards - 3 columns, 2 rows
+                // 6 Data cards
                 const cardW = (W - 60) / 3;
-                const cardH = 60;
+                const cardH = 58;
                 const cards = [
                     { label: '总单数', value: data.totalOrders + '单', color: '#2d3748' },
                     { label: '总客户数', value: data.totalCustomers + '个', color: '#2d3748' },
@@ -1401,89 +1394,83 @@
                     { label: '退货单数', value: returnCount + '单', color: '#e53e3e' }
                 ];
                 cards.forEach((c, i) => {
-                    const col = i % 3;
-                    const row = Math.floor(i / 3);
-                    const cx = 20 + col * (cardW + 10);
-                    const cy = y + row * (cardH + 10);
-                    roundRect(cx, cy, cardW, cardH, 8, '#f7fafc', '#e2e8f0');
-                    drawText(c.label, cx + cardW/2, cy + 10, '11px "Microsoft YaHei", sans-serif', '#718096', 'center');
-                    drawText(c.value, cx + cardW/2, cy + 30, 'bold 18px "Microsoft YaHei", sans-serif', c.color, 'center');
+                    const col = i % 3, row = Math.floor(i / 3);
+                    const cx = 20 + col * (cardW + 10), cy = curY + row * (cardH + 10);
+                    rRect(cx, cy, cardW, cardH, 8, '#f7fafc', '#e2e8f0');
+                    txt(c.label, cx + cardW/2, cy + 10, '11px "Microsoft YaHei",sans-serif', '#718096', 'center');
+                    txt(c.value, cx + cardW/2, cy + 30, 'bold 18px "Microsoft YaHei",sans-serif', c.color, 'center');
                 });
-                y += 2 * (cardH + 10) + 15;
+                curY += 2 * (cardH + 10) + 15;
                 
-                // Charts section - 2 columns
+                // Charts: use Chart.js toBase64Image then draw as Image
                 const chartW = (W - 50) / 2;
-                const chartH = 220;
+                const chartH = 230;
                 
-                // Left: Pie chart
-                roundRect(20, y, chartW, chartH + 30, 10, '#f7fafc', '#e2e8f0');
-                drawText('业务员销售额占比', 20 + chartW/2, y + 8, 'bold 13px "Microsoft YaHei", sans-serif', '#2d3748', 'center');
-                // Copy pie chart from canvas
-                try {
-                    const pieSrc = document.getElementById('pieChart');
-                    ctx.drawImage(pieSrc, 30, y + 30, chartW - 20, chartH - 10);
-                } catch(e) {}
+                // Pie chart area
+                rRect(20, curY, chartW, chartH + 30, 10, '#f7fafc', '#e2e8f0');
+                txt('业务员销售额占比', 20 + chartW/2, curY + 8, 'bold 13px "Microsoft YaHei",sans-serif', '#2d3748', 'center');
                 
-                // Right: Bar chart
+                // Bar chart area
                 const barX = 20 + chartW + 10;
-                roundRect(barX, y, chartW, chartH + 30, 10, '#f7fafc', '#e2e8f0');
-                drawText('业务员销售额对比', barX + chartW/2, y + 8, 'bold 13px "Microsoft YaHei", sans-serif', '#2d3748', 'center');
-                try {
-                    const barSrc = document.getElementById('barChart');
-                    ctx.drawImage(barSrc, barX + 10, y + 30, chartW - 20, chartH - 10);
-                } catch(e) {}
+                rRect(barX, curY, chartW, chartH + 30, 10, '#f7fafc', '#e2e8f0');
+                txt('业务员销售额对比', barX + chartW/2, curY + 8, 'bold 13px "Microsoft YaHei",sans-serif', '#2d3748', 'center');
                 
-                y += chartH + 50;
+                // Draw charts from Chart.js canvases via toDataURL
+                const drawChartOnCanvas = (chartCanvasEl, dx, dy, dw, dh) => {
+                    try {
+                        const img = new Image();
+                        img.src = chartCanvasEl.toDataURL('image/png');
+                        ctx.drawImage(img, dx, dy, dw, dh);
+                    } catch(e) {
+                        // Fallback: direct draw
+                        try { ctx.drawImage(chartCanvasEl, dx, dy, dw, dh); } catch(e2) {}
+                    }
+                };
                 
-                // Salesperson ranking list
-                drawText('业务员排名', 20, y, 'bold 14px "Microsoft YaHei", sans-serif', '#1a365d');
-                y += 28;
+                const pieEl = document.getElementById('pieChart');
+                const barEl = document.getElementById('barChart');
+                drawChartOnCanvas(pieEl, 30, curY + 30, chartW - 20, chartH - 10);
+                drawChartOnCanvas(barEl, barX + 10, curY + 30, chartW - 20, chartH - 10);
                 
-                const sortedSP = [...data.salespersons].sort((a,b) => b.total - a.total);
+                curY += chartH + 50;
+                
+                // Salesperson ranking
+                txt('业务员排名', 20, curY, 'bold 14px "Microsoft YaHei",sans-serif', '#1a365d');
+                curY += 28;
+                
                 sortedSP.forEach((sp, i) => {
                     const pct = data.netSales > 0 ? (sp.total / data.netSales * 100).toFixed(1) : '0.0';
                     const rowH = 32;
                     
                     // Rank circle
                     ctx.beginPath();
-                    ctx.arc(36, y + 12, 12, 0, Math.PI * 2);
+                    ctx.arc(36, curY + 14, 12, 0, Math.PI * 2);
                     ctx.fillStyle = i < 3 ? '#1a365d' : '#cbd5e0';
                     ctx.fill();
-                    drawText(String(i + 1), 36, y + 5, 'bold 12px "Microsoft YaHei", sans-serif', '#ffffff', 'center');
+                    txt(String(i+1), 36, curY + 7, 'bold 12px "Microsoft YaHei",sans-serif', '#ffffff', 'center');
                     
                     // Name + count
-                    drawText(sp.name, 58, y + 3, 'bold 13px "Microsoft YaHei", sans-serif', '#2d3748');
-                    drawText(sp.count + '单', 58 + ctx.measureText(sp.name).width + 6, y + 5, '11px "Microsoft YaHei", sans-serif', '#718096');
+                    txt(sp.name, 58, curY + 5, 'bold 13px "Microsoft YaHei",sans-serif', '#2d3748');
+                    const nameW = ctx.measureText(sp.name).width;
+                    txt(sp.count + '单', 58 + nameW + 6, curY + 7, '11px "Microsoft YaHei",sans-serif', '#718096');
                     
-                    // Amount
-                    drawText(formatCurrency(sp.total), W - 110, y + 3, 'bold 14px "Microsoft YaHei", sans-serif', '#1a365d');
+                    // Amount + percentage
+                    txt(formatCurrency(sp.total), W - 110, curY + 5, 'bold 14px "Microsoft YaHei",sans-serif', '#1a365d');
+                    txt(pct + '%', W - 30, curY + 7, '12px "Microsoft YaHei",sans-serif', '#718096', 'right');
                     
-                    // Percentage
-                    drawText(pct + '%', W - 30, y + 5, '12px "Microsoft YaHei", sans-serif', '#718096', 'right');
+                    // Divider
+                    ctx.beginPath(); ctx.moveTo(20, curY + rowH); ctx.lineTo(W - 20, curY + rowH);
+                    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.stroke();
                     
-                    // Divider line
-                    ctx.beginPath();
-                    ctx.moveTo(20, y + rowH);
-                    ctx.lineTo(W - 20, y + rowH);
-                    ctx.strokeStyle = '#e2e8f0';
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                    
-                    y += rowH;
+                    curY += rowH;
                 });
                 
-                y += 15;
+                curY += 15;
+                txt('© 2026 每日销售报表工具 · 开发者：张洪杰 · 版权所有 · 侵权必究', W/2, curY, '10px "Microsoft YaHei",sans-serif', '#a0aec0', 'center');
                 
-                // Footer
-                drawText('© 2026 每日销售报表工具 · 开发者：张洪杰 · 版权所有 · 侵权必究', W/2, y, '10px "Microsoft YaHei", sans-serif', '#a0aec0', 'center');
-                
-                // Adjust canvas height to actual content
-                const finalH = y + 20;
-                canvas.height = finalH * scale;
-                
-                // Download
+                // Download directly (no canvas resize - that clears content!)
                 const link = document.createElement('a');
-                link.download = `销售报表_${data.date ? data.date.replace(/\//g, '') : ''}.png`;
+                link.download = '销售报表_' + (data.date ? data.date.replace(/\//g, '') : '') + '.png';
                 link.href = canvas.toDataURL('image/png');
                 link.click();
                 
