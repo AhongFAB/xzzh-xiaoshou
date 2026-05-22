@@ -808,7 +808,7 @@
     <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <!-- html2canvas removed: using pure Canvas API for watermark-free screenshots -->
     
     <script>
         // Global State
@@ -1332,72 +1332,158 @@
             showToast('Excel报表已导出', 'success');
         }
         
-        // Screenshot
+        // Screenshot - Pure Canvas, no external libs, no watermark
         async function takeScreenshot() {
             try {
                 showLoading(true);
-                
-                // 准备看板截图数据
-                const dash = document.getElementById('dashboardCapture');
                 const data = currentData;
                 if (!data) { showToast('请先上传数据', 'error'); showLoading(false); return; }
                 
-                // 填充看板标题和日期
-                document.getElementById('dashTitle').textContent = '每日销售报表';
-                document.getElementById('dashDate').textContent = data.date;
+                // Calculate return count
+                const returnCount = data.salespersons.reduce((sum, sp) => {
+                    return sum + sp.records.filter(r => r.isReturn).length;
+                }, 0);
                 
-                // 填充核心数据卡片
-                const cardsHtml = [
+                const W = 800, scale = 2;
+                const canvas = document.createElement('canvas');
+                canvas.width = W * scale;
+                canvas.height = 900 * scale; // will adjust
+                const ctx = canvas.getContext('2d');
+                ctx.scale(scale, scale);
+                
+                // Helper: rounded rect
+                function roundRect(x, y, w, h, r, fill, stroke) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + r, y);
+                    ctx.lineTo(x + w - r, y);
+                    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                    ctx.lineTo(x + w, y + h - r);
+                    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                    ctx.lineTo(x + r, y + h);
+                    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+                    ctx.lineTo(x, y + r);
+                    ctx.quadraticCurveTo(x, y, x + r, y);
+                    ctx.closePath();
+                    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+                    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+                }
+                
+                // Helper: draw text
+                function drawText(text, x, y, font, color, align) {
+                    ctx.font = font;
+                    ctx.fillStyle = color;
+                    ctx.textAlign = align || 'left';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(text, x, y);
+                }
+                
+                let y = 0;
+                
+                // Background
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, W, 900);
+                
+                // Header bar
+                roundRect(0, 0, W, 60, 0, '#1a365d');
+                drawText('每日销售报表', W/2, 14, 'bold 22px "Microsoft YaHei", sans-serif', '#ffffff', 'center');
+                drawText(data.date || '', W/2, 40, '14px "Microsoft YaHei", sans-serif', 'rgba(255,255,255,0.8)', 'center');
+                y = 80;
+                
+                // 6 Data cards - 3 columns, 2 rows
+                const cardW = (W - 60) / 3;
+                const cardH = 60;
+                const cards = [
                     { label: '总单数', value: data.totalOrders + '单', color: '#2d3748' },
                     { label: '总客户数', value: data.totalCustomers + '个', color: '#2d3748' },
-                    { label: '净销售额', value: formatCurrency(data.netAmount), color: '#1a365d' },
-                    { label: '销售总额', value: formatCurrency(data.salesAmount), color: '#38a169' },
-                    { label: '退货总额', value: formatCurrency(Math.abs(data.returnAmount)), color: '#e53e3e' },
-                    { label: '退货单数', value: data.returnOrders + '单', color: '#e53e3e' }
-                ].map(c => '<div style="background:#f7fafc; border-radius:8px; padding:12px; text-align:center;"><div style="font-size:11px; color:#718096;">' + c.label + '</div><div style="font-size:20px; font-weight:700; color:' + c.color + ';">' + c.value + '</div></div>').join('');
-                document.getElementById('dashCards').innerHTML = cardsHtml;
+                    { label: '净销售额', value: formatCurrency(data.netSales), color: '#1a365d' },
+                    { label: '销售总额', value: formatCurrency(data.totalSales), color: '#38a169' },
+                    { label: '退货总额', value: formatCurrency(data.totalReturns), color: '#e53e3e' },
+                    { label: '退货单数', value: returnCount + '单', color: '#e53e3e' }
+                ];
+                cards.forEach((c, i) => {
+                    const col = i % 3;
+                    const row = Math.floor(i / 3);
+                    const cx = 20 + col * (cardW + 10);
+                    const cy = y + row * (cardH + 10);
+                    roundRect(cx, cy, cardW, cardH, 8, '#f7fafc', '#e2e8f0');
+                    drawText(c.label, cx + cardW/2, cy + 10, '11px "Microsoft YaHei", sans-serif', '#718096', 'center');
+                    drawText(c.value, cx + cardW/2, cy + 30, 'bold 18px "Microsoft YaHei", sans-serif', c.color, 'center');
+                });
+                y += 2 * (cardH + 10) + 15;
                 
-                // 填充业务员排名列表
-                const spList = data.salespersons.sort((a,b) => b.amount - a.amount).map((sp, i) => {
-                    const pct = data.netAmount > 0 ? (sp.amount / data.netAmount * 100).toFixed(1) : 0;
-                    return '<div style="display:flex; align-items:center; padding:8px 0; border-bottom:1px solid #e2e8f0;">' +
-                        '<div style="width:24px; height:24px; border-radius:50%; background:' + (i<3?'#1a365d':'#cbd5e0') + '; color:white; text-align:center; line-height:24px; font-size:12px; font-weight:600; margin-right:10px;">' + (i+1) + '</div>' +
-                        '<div style="flex:1; font-size:13px; font-weight:600; color:#2d3748;">' + sp.name + '<span style="font-size:11px; color:#718096; margin-left:6px;">' + sp.orders + '单</span></div>' +
-                        '<div style="font-size:14px; font-weight:700; color:#1a365d;">' + formatCurrency(sp.amount) + '</div>' +
-                        '<div style="width:80px; text-align:right; font-size:12px; color:#718096;">' + pct + '%</div>' +
-                        '</div>';
-                }).join('');
-                document.getElementById('dashSalespersonList').innerHTML = spList;
+                // Charts section - 2 columns
+                const chartW = (W - 50) / 2;
+                const chartH = 220;
                 
-                // 复制图表到看板
-                const pieSrc = document.getElementById('pieChart');
-                const barSrc = document.getElementById('barChart');
-                const dashPie = document.getElementById('dashPieChart');
-                const dashBar = document.getElementById('dashBarChart');
-                dashPie.getContext('2d').drawImage(pieSrc, 0, 0, 350, 250);
-                dashBar.getContext('2d').drawImage(barSrc, 0, 0, 350, 250);
+                // Left: Pie chart
+                roundRect(20, y, chartW, chartH + 30, 10, '#f7fafc', '#e2e8f0');
+                drawText('业务员销售额占比', 20 + chartW/2, y + 8, 'bold 13px "Microsoft YaHei", sans-serif', '#2d3748', 'center');
+                // Copy pie chart from canvas
+                try {
+                    const pieSrc = document.getElementById('pieChart');
+                    ctx.drawImage(pieSrc, 30, y + 30, chartW - 20, chartH - 10);
+                } catch(e) {}
                 
-                // 显示看板并截图
-                dash.style.display = 'block';
-                dash.style.position = 'absolute';
-                dash.style.left = '0';
-                dash.style.top = '0';
-                dash.style.zIndex = '-1';
+                // Right: Bar chart
+                const barX = 20 + chartW + 10;
+                roundRect(barX, y, chartW, chartH + 30, 10, '#f7fafc', '#e2e8f0');
+                drawText('业务员销售额对比', barX + chartW/2, y + 8, 'bold 13px "Microsoft YaHei", sans-serif', '#2d3748', 'center');
+                try {
+                    const barSrc = document.getElementById('barChart');
+                    ctx.drawImage(barSrc, barX + 10, y + 30, chartW - 20, chartH - 10);
+                } catch(e) {}
                 
-                const canvas = await html2canvas(dash, {
-                    backgroundColor: '#ffffff',
-                    scale: 2,
-                    logging: false,
-                    useCORS: true,
-                    width: 800
+                y += chartH + 50;
+                
+                // Salesperson ranking list
+                drawText('业务员排名', 20, y, 'bold 14px "Microsoft YaHei", sans-serif', '#1a365d');
+                y += 28;
+                
+                const sortedSP = [...data.salespersons].sort((a,b) => b.total - a.total);
+                sortedSP.forEach((sp, i) => {
+                    const pct = data.netSales > 0 ? (sp.total / data.netSales * 100).toFixed(1) : '0.0';
+                    const rowH = 32;
+                    
+                    // Rank circle
+                    ctx.beginPath();
+                    ctx.arc(36, y + 12, 12, 0, Math.PI * 2);
+                    ctx.fillStyle = i < 3 ? '#1a365d' : '#cbd5e0';
+                    ctx.fill();
+                    drawText(String(i + 1), 36, y + 5, 'bold 12px "Microsoft YaHei", sans-serif', '#ffffff', 'center');
+                    
+                    // Name + count
+                    drawText(sp.name, 58, y + 3, 'bold 13px "Microsoft YaHei", sans-serif', '#2d3748');
+                    drawText(sp.count + '单', 58 + ctx.measureText(sp.name).width + 6, y + 5, '11px "Microsoft YaHei", sans-serif', '#718096');
+                    
+                    // Amount
+                    drawText(formatCurrency(sp.total), W - 110, y + 3, 'bold 14px "Microsoft YaHei", sans-serif', '#1a365d');
+                    
+                    // Percentage
+                    drawText(pct + '%', W - 30, y + 5, '12px "Microsoft YaHei", sans-serif', '#718096', 'right');
+                    
+                    // Divider line
+                    ctx.beginPath();
+                    ctx.moveTo(20, y + rowH);
+                    ctx.lineTo(W - 20, y + rowH);
+                    ctx.strokeStyle = '#e2e8f0';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    
+                    y += rowH;
                 });
                 
-                // 隐藏看板
-                dash.style.display = 'none';
-                dash.style.left = '-9999px';
+                y += 15;
                 
+                // Footer
+                drawText('© 2026 每日销售报表工具 · 开发者：张洪杰 · 版权所有 · 侵权必究', W/2, y, '10px "Microsoft YaHei", sans-serif', '#a0aec0', 'center');
+                
+                // Adjust canvas height to actual content
+                const finalH = y + 20;
+                canvas.height = finalH * scale;
+                
+                // Download
                 const link = document.createElement('a');
-                link.download = `销售报表_${currentData ? currentData.date.replace(/\//g, '') : ''}.png`;
+                link.download = `销售报表_${data.date ? data.date.replace(/\//g, '') : ''}.png`;
                 link.href = canvas.toDataURL('image/png');
                 link.click();
                 
