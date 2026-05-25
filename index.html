@@ -88,10 +88,7 @@
         .header h1 {
             font-size: 1.75rem;
             font-weight: 700;
-            background: linear-gradient(135deg, var(--accent) 0%, var(--success) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--accent);
             margin-bottom: 0.25rem;
             display: flex;
             align-items: center;
@@ -99,10 +96,20 @@
             gap: 0.5rem;
         }
 
-        .header h1 svg {
-            width: 28px;
-            height: 28px;
-            flex-shrink: 0;
+        .header h1 .icon-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(56,189,248,0.15) 0%, rgba(52,211,153,0.15) 100%);
+            border: 1px solid rgba(56,189,248,0.3);
+        }
+
+        .header h1 .icon-wrap svg {
+            width: 20px;
+            height: 20px;
             stroke: var(--accent);
             fill: none;
         }
@@ -767,7 +774,7 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/><line x1="15" y1="21" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/></svg>每日销售日报生成器</h1>
+            <h1><span class="icon-wrap"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/><path d="M15 21V9"/></svg></span>每日销售日报生成器</h1>
             <p>快速处理ERP销售数据，生成专业报表</p>
         </header>
         
@@ -1098,23 +1105,10 @@
         function isSummaryRow(row, columnMap) {
             if (!row || row.length === 0) return false;
             
-            // 获取序号列和单据号码列
-            const firstCell = String(row[0] || '').trim();
-            const docNoCell = columnMap.docNo >= 0 ? String(row[columnMap.docNo] || '').trim() : '';
-            
-            // 检查是否包含合计/小计/制表等关键词
-            if (firstCell.includes('合计') || firstCell.includes('汇总') || 
-                firstCell.includes('小计') || firstCell.includes('制表')) {
-                return true;
-            }
-            
-            // 20列格式特有：单据号码列包含"合计"
-            if (docNoCell.includes('合计')) {
-                return true;
-            }
-            
-            // 检查序号列是否为NaN或空（20列格式的合计行特征）
-            if ((firstCell === 'nan' || firstCell === 'NaN' || firstCell === '') && docNoCell.includes('合计')) {
+            // 检查所有列的内容，看是否有合计/制表等关键词
+            const rowStr = row.map(c => String(c || '')).join('');
+            if (rowStr.includes('合计') || rowStr.includes('汇总') || 
+                rowStr.includes('小计') || rowStr.includes('制表')) {
                 return true;
             }
             
@@ -1233,7 +1227,8 @@
                             queryDate: ''
                         };
                         
-                        // 遍历所有Sheet
+                        // 遍历所有Sheet，收集所有有效数据
+                        let allRecords = [];
                         for (const sheetName of workbook.SheetNames) {
                             const worksheet = workbook.Sheets[sheetName];
                             const sheetData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
@@ -1245,34 +1240,18 @@
                                 result.queryDate = parsed.queryDate;
                             }
                             
-                            const lowerName = sheetName.toLowerCase();
-                            if (lowerName.includes('总表') || lowerName.includes('销售')) {
-                                result.salesReport = parsed.records;
-                            } else if (lowerName.includes('门店')) {
-                                result.mendian = parsed.records;
-                            } else if (lowerName.includes('大客户')) {
-                                result.dakehu = parsed.records;
-                            }
+                            // 不管Sheet叫什么名字，能解析出数据就收集
+                            allRecords = allRecords.concat(parsed.records);
                         }
                         
-                        // 如果没有总表但有分类数据，合并
-                        if (!result.salesReport) {
-                            result.salesReport = [...(result.mendian || []), ...(result.dakehu || [])];
+                        if (allRecords.length > 0) {
+                            result.salesReport = allRecords;
                         }
                         
-                        // 按分类重新分配
-                        if (result.mendian || result.dakehu) {
+                        // 按业务员自动分类门店/大客户
+                        if (result.salesReport) {
                             result.salesReport.forEach(r => {
                                 r.category = DAKEHU_SALESPERSONS.includes(r.salesperson) ? 'dakehu' : 'mendian';
-                            });
-                        } else {
-                            // 只有总表时，按业务员自动分类
-                            result.salesReport.forEach(r => {
-                                if (DAKEHU_SALESPERSONS.includes(r.salesperson)) {
-                                    r.category = 'dakehu';
-                                } else {
-                                    r.category = 'mendian';
-                                }
                             });
                         }
                         
