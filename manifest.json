@@ -1,22 +1,25 @@
 {
-    "name": "每日销售报表工具",
-    "short_name": "销售报表",
-    "description": "每日销售数据报表生成工具",
+    "name": "每日销售日报生成器",
+    "short_name": "销售日报",
+    "description": "快速处理ERP销售数据，生成专业报表",
     "start_url": "./index.html",
     "display": "standalone",
-    "orientation": "any",
-    "theme_color": "#1a365d",
-    "background_color": "#f5f7fa",
+    "background_color": "#0f172a",
+    "theme_color": "#0f172a",
+    "orientation": "portrait-primary",
     "icons": [
         {
-            "src": "icon-192.png",
+            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%230f172a'/%3E%3Cstop offset='100%25' stop-color='%231e3a5f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='192' height='192' rx='38'/%3E%3Cpath fill='white' d='M38 48h116v12H38zm0 27h116v12H38zm0 27h86v12H38z'/%3E%3Ccircle fill='%2338bdf8' cx='150' cy='138' r='19'/%3E%3Cpath fill='white' stroke='white' stroke-width='3' d='M143 138l5 5 12-12'/%3E%3C/svg%3E",
             "sizes": "192x192",
-            "type": "image/png"
+            "type": "image/svg+xml"
         },
         {
-            "src": "icon-512.png",
+            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%230f172a'/%3E%3Cstop offset='100%25' stop-color='%231e3a5f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='512' height='512' rx='102'/%3E%3Cpath fill='white' d='M102 128h308v32H102zm0 72h308v32H102zm0 72h230v32H102z'/%3E%3Ccircle fill='%2338bdf8' cx='400' cy='368' r='50'/%3E%3Cpath fill='white' stroke='white' stroke-width='8' d='M380 368l14 14 32-32'/%3E%3C/svg%3E",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/svg+xml"
         }
-    ]
+    ],
+    "categories": ["business", "productivity"],
+    "lang": "zh-CN",
+    "version": "1.0.1"
 }

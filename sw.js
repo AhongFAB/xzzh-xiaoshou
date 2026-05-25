@@ -1,21 +1,19 @@
-// Service Worker for Daily Sales Report Tool
-const CACHE_NAME = 'sales-report-v1';
-const ASSETS_TO_CACHE = [
-    '/每日销售报表工具/index.html',
-    '/每日销售报表工具/manifest.json',
-    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-    'https://cdn.jsdelivr.net/npm/chart.js',
-    'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+// Service Worker for 每日销售日报生成器
+const CACHE_NAME = 'xzzh-xiaoshou-v1.0.1';
+const ASSETS = [
+    './',
+    './index.html',
+    './manifest.json'
 ];
 
 // Install event
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then((cache) => {
-                return cache.addAll(ASSETS_TO_CACHE);
-            })
-            .then(() => self.skipWaiting())
+        caches.open(CACHE_NAME).then((cache) => {
+            return cache.addAll(ASSETS);
+        }).then(() => {
+            return self.skipWaiting();
+        })
     );
 });
 
@@ -24,62 +22,44 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
-                cacheNames.map((cacheName) => {
-                    if (cacheName !== CACHE_NAME) {
-                        return caches.delete(cacheName);
-                    }
-                })
+                cacheNames
+                    .filter((name) => name !== CACHE_NAME)
+                    .map((name) => caches.delete(name))
             );
-        }).then(() => self.clients.claim())
+        }).then(() => {
+            return self.clients.claim();
+        })
     );
 });
 
 // Fetch event
 self.addEventListener('fetch', (event) => {
-    // Skip non-GET requests
-    if (event.request.method !== 'GET') {
+    // Skip cross-origin requests
+    if (!event.request.url.startsWith(self.location.origin)) {
         return;
     }
-
+    
     event.respondWith(
-        caches.match(event.request)
-            .then((cachedResponse) => {
-                if (cachedResponse) {
-                    return cachedResponse;
+        caches.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+            
+            return fetch(event.request).then((response) => {
+                // Don't cache non-successful responses
+                if (!response || response.status !== 200 || response.type !== 'basic') {
+                    return response;
                 }
-
-                return fetch(event.request)
-                    .then((response) => {
-                        // Don't cache if not a valid response
-                        if (!response || response.status !== 200 || response.type !== 'basic') {
-                            // Allow cross-origin requests (CDN resources)
-                            if (response && response.status === 200) {
-                                const responseClone = response.clone();
-                                caches.open(CACHE_NAME).then((cache) => {
-                                    cache.put(event.request, responseClone);
-                                });
-                            }
-                            return response;
-                        }
-
-                        const responseClone = response.clone();
-                        caches.open(CACHE_NAME).then((cache) => {
-                            cache.put(event.request, responseClone);
-                        });
-
-                        return response;
-                    })
-                    .catch(() => {
-                        // Return offline page if available
-                        return caches.match('/每日销售报表工具/index.html');
-                    });
-            })
+                
+                // Clone the response
+                const responseToCache = response.clone();
+                
+                caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(event.request, responseToCache);
+                });
+                
+                return response;
+            });
+        })
     );
-});
-
-// Handle messages from main thread
-self.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
-    }
 });
