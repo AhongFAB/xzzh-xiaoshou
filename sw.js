@@ -1,5 +1,5 @@
 // Service Worker for 每日销售日报生成器
-const CACHE_NAME = 'xzzh-xiaoshou-v1.0.3';
+const CACHE_NAME = 'xzzh-xiaoshou-v1.0.4';
 const ASSETS = [
     './',
     './index.html',
